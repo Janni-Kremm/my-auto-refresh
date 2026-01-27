@@ -1,18 +1,38 @@
 import time
 import sys
+import os
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+
+# Получаем ключи из "сейфа" GitHub
+TG_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
+def send_telegram(message):
+    if not TG_TOKEN or not TG_CHAT_ID:
+        print("Ошибка: Нет ключей Telegram!")
+        return
+    
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+    data = {
+        "chat_id": TG_CHAT_ID,
+        "text": message
+    }
+    try:
+        requests.post(url, data=data)
+    except Exception as e:
+        print(f"Не удалось отправить в Телеграм: {e}")
 
 TARGET_URL = "https://hlorka.ua/test/"
 TOTAL_STEPS = 9
 FINAL_TEXT = "this is end"
 
 def run_browser_task():
-    print(">>> ЗАПУСК GITHUB ACTION...")
+    print(">>> ЗАПУСК СКРИПТА...")
     
-    # Настройки для работы без монитора (headless)
     chrome_options = Options()
     chrome_options.add_argument("--headless") 
     chrome_options.add_argument("--no-sandbox")
@@ -21,7 +41,6 @@ def run_browser_task():
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
     try:
-        print(f"Открываю: {TARGET_URL}")
         driver.get(TARGET_URL)
         time.sleep(5)
 
@@ -30,13 +49,12 @@ def run_browser_task():
             print(f"--- Шаг {i} ---")
             
             if i == 8:
-                print("!!! 8-й шаг. Жду 30 сек...")
+                print("8-й шаг (ожидание)...")
                 driver.refresh()
-                # Проверяем текст во время ожидания
-                for _ in range(10):
+                # Ждем появления текста
+                for _ in range(10): 
                     time.sleep(3)
                     if FINAL_TEXT in driver.page_source:
-                        print("НАЙДЕНО (досрочно)!")
                         found = True
                         break
                 if found: break
@@ -44,7 +62,6 @@ def run_browser_task():
                 driver.refresh()
                 time.sleep(5)
                 if FINAL_TEXT in driver.page_source:
-                    print(f"НАЙДЕНО (на шаге {i})!")
                     found = True
                     break
         
@@ -55,14 +72,17 @@ def run_browser_task():
                 found = True
 
         if found:
-            print(f">>> УСПЕХ: '{FINAL_TEXT}' найден.")
+            print("УСПЕХ.")
+            send_telegram(f"✅ УСПЕХ! Скрипт нашел надпись '{FINAL_TEXT}'.")
         else:
-            print(f">>> ОШИБКА: '{FINAL_TEXT}' НЕ найдена!")
-            # Эта команда заставит GitHub пометить выполнение красным крестиком (ошибка)
-            sys.exit(1) 
+            print("ОШИБКА.")
+            send_telegram(f"❌ ОШИБКА! Надпись '{FINAL_TEXT}' НЕ найдена после всех попыток.")
+            sys.exit(1) # Помечаем запуск как "Failed" в GitHub
 
     except Exception as e:
-        print(f"КРИТИЧЕСКАЯ ОШИБКА: {e}")
+        error_msg = f"⚠️ Скрипт сломался: {e}"
+        print(error_msg)
+        send_telegram(error_msg)
         sys.exit(1)
     finally:
         driver.quit()
