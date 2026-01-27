@@ -1,0 +1,27 @@
+name: Hourly Refresh
+
+on:
+  schedule:
+    # Запуск в 0 минут каждого часа (раз в час)
+    - cron: '0 * * * *'
+  # Кнопка, чтобы запустить вручную для теста
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install libraries
+        run: |
+          pip install selenium webdriver-manager
+
+      - name: Run script
+        run: python script.py
