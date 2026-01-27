@@ -7,13 +7,13 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 
-# Получаем ключи из "сейфа" GitHub
+# Получаем ключи
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 def send_telegram(message):
     if not TG_TOKEN or not TG_CHAT_ID:
-        print("Ошибка: Нет ключей Telegram!")
+        print(">>> ОШИБКА: Нет ключей Telegram (проверьте Secrets)!")
         return
     
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
@@ -22,16 +22,20 @@ def send_telegram(message):
         "text": message
     }
     try:
-        requests.post(url, data=data)
+        response = requests.post(url, data=data)
+        if response.status_code == 200:
+            print(">>> Telegram: Сообщение отправлено!")
+        else:
+            print(f">>> Telegram ОШИБКА: {response.text}")
     except Exception as e:
-        print(f"Не удалось отправить в Телеграм: {e}")
+        print(f">>> Telegram СБОЙ: {e}")
 
 TARGET_URL = "https://hlorka.ua/test/"
 TOTAL_STEPS = 9
 FINAL_TEXT = "this is end"
 
 def run_browser_task():
-    print(">>> ЗАПУСК СКРИПТА...")
+    print(">>> ЗАПУСК СКРИПТА (ВЕРСИЯ С ТЕЛЕГРАМОМ)...")
     
     chrome_options = Options()
     chrome_options.add_argument("--headless") 
@@ -51,7 +55,7 @@ def run_browser_task():
             if i == 8:
                 print("8-й шаг (ожидание)...")
                 driver.refresh()
-                # Ждем появления текста
+                # Ждем
                 for _ in range(10): 
                     time.sleep(3)
                     if FINAL_TEXT in driver.page_source:
@@ -65,7 +69,6 @@ def run_browser_task():
                     found = True
                     break
         
-        # Финальная проверка
         if not found:
             time.sleep(3)
             if FINAL_TEXT in driver.page_source:
@@ -76,13 +79,13 @@ def run_browser_task():
             send_telegram(f"✅ УСПЕХ! Скрипт нашел надпись '{FINAL_TEXT}'.")
         else:
             print("ОШИБКА.")
-            send_telegram(f"❌ ОШИБКА! Надпись '{FINAL_TEXT}' НЕ найдена после всех попыток.")
-            sys.exit(1) # Помечаем запуск как "Failed" в GitHub
+            send_telegram(f"❌ ОШИБКА! Надпись '{FINAL_TEXT}' НЕ найдена.")
+            sys.exit(1)
 
     except Exception as e:
-        error_msg = f"⚠️ Скрипт сломался: {e}"
-        print(error_msg)
-        send_telegram(error_msg)
+        msg = f"⚠️ Скрипт сломался: {e}"
+        print(msg)
+        send_telegram(msg)
         sys.exit(1)
     finally:
         driver.quit()
