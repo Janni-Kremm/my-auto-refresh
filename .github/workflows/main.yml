@@ -2,10 +2,8 @@ name: Hourly Refresh
 
 on:
   schedule:
-    # Запуск в 0 минут каждого часа (раз в час)
-    - cron: '0 * * * *'
-  # Кнопка, чтобы запустить вручную для теста
-  workflow_dispatch:
+    - cron: '0 * * * *' # Раз в час
+  workflow_dispatch:      # Кнопка ручного запуска
 
 jobs:
   build:
@@ -21,7 +19,10 @@ jobs:
 
       - name: Install libraries
         run: |
-          pip install selenium webdriver-manager
+          pip install selenium webdriver-manager requests
 
       - name: Run script
+        env: # ПЕРЕДАЕМ КЛЮЧИ В СКРИПТ
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python script.py
