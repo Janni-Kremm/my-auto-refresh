@@ -1,0 +1,32 @@
+name: Shina Check (Daily)
+
+on:
+  schedule:
+    # 8:00 UTC = 10:00 Киев (зимой)
+    # 14:00 UTC = 16:00 Киев (зимой)
+    - cron: '0 8,14 * * *'
+  
+  # Кнопка для ручного запуска (чтобы вы могли проверить прямо сейчас)
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install libraries
+        run: |
+          pip install selenium webdriver-manager requests
+
+      - name: Run Shina script
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python shina.py
