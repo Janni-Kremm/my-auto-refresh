@@ -23,7 +23,7 @@ jobs:
 
       - name: Install libraries
         run: |
-          pip install selenium webdriver-manager requests
+                    pip install selenium webdriver-manager requests undetected-chromedriver
 
       - name: Run Shina script
         env:
