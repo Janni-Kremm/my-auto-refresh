@@ -32,7 +32,9 @@ def run_shina_task():
     options.add_argument("--window-size=1920,1080")
     
     # Запускаем "невидимый" драйвер
-    driver = uc.Chrome(options=options, version_main=None)
+    # version_main=144 заставит его скачать драйвер именно под 144-й Хром
+    driver = uc.Chrome(options=options, version_main=144)
+
 
     try:
         # 1. РАЗОГРЕВ
