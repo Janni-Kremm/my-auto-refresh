@@ -12,7 +12,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 # --- НАСТРОЙКИ ---
 URL_WARMUP = "https://titanshina.ua/test/?tyres=1"
 URL_MAIN = "https://titanshina.ua/test/"
-FINAL_TEXT = "the end"
+
 MAX_WAIT_MINUTES = 15
 
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -33,10 +33,16 @@ def send_telegram(message):
 
 def create_driver():
     options = webdriver.ChromeOptions()
+
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
+
+    # небольшой антидетект-минимум
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+    )
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
@@ -45,11 +51,11 @@ def create_driver():
 
 
 def run_shina_task():
-    print(">>> ЗАПУСК 'ШИНА' (STABLE SELENIUM MODE)...")
+    print(">>> ЗАПУСК 'ШИНА' (STEP MONITOR MODE)...")
 
     driver = None
 
-    # --- RETRY ---
+    # --- запуск драйвера ---
     for attempt in range(3):
         try:
             driver = create_driver()
@@ -63,64 +69,49 @@ def run_shina_task():
         sys.exit(1)
 
     try:
-        # 1. РАЗОГРЕВ
+        # --- 1. РАЗОГРЕВ ---
         print(f"Разогрев: {URL_WARMUP}")
         driver.get(URL_WARMUP)
-        time.sleep(15)
+        time.sleep(5)
 
-        # Проверка Cloudflare
-        try:
-            body_text = driver.find_element(By.TAG_NAME, "body").text
-            if "Verify you are human" in body_text:
-                print("!!! Cloudflare detected. Жду...")
-                time.sleep(30)
-        except:
-            pass
-
-        # Refresh
+        # несколько обновлений
         for i in range(3):
-            print(f"Refresh {i+1}")
+            print(f"Warmup refresh {i+1}")
             driver.refresh()
-            time.sleep(10)
+            time.sleep(5)
 
-        # 2. ОСНОВНОЙ ПРОЦЕСС
-        print(f"Основной процесс: {URL_MAIN}")
+        # --- 2. ОСНОВНОЙ URL ---
+        print(f"Переход: {URL_MAIN}")
         driver.get(URL_MAIN)
-        time.sleep(10)
 
         start_time = time.time()
 
-        # Лог страницы
-        try:
-            initial_source = driver.find_element(By.TAG_NAME, "body").text
-            print(f"--- ВИДИМ ---\n{initial_source[:200]}\n-------------")
+        last_step = None
 
-            if "Verify you are human" in initial_source:
-                send_telegram("❌ Cloudflare блокирует доступ")
-        except:
-            print("Не удалось прочитать страницу")
-
-        # Ожидание
         while True:
             if time.time() - start_time > MAX_WAIT_MINUTES * 60:
-                try:
-                    final_source = driver.find_element(By.TAG_NAME, "body").text[:200]
-                except:
-                    final_source = "???"
-
-                send_telegram(f"❌ TIMEOUT: {final_source}")
+                send_telegram("❌ TIMEOUT: не дошли до step 12")
                 sys.exit(1)
 
             try:
-                page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+                body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
 
-                if FINAL_TEXT in page_text:
-                    send_telegram("✅ SUCCESS: найден 'the end'")
+                # ищем step
+                if "step:" in body_text:
+                    for line in body_text.split("\n"):
+                        if "step:" in line:
+                            last_step = line.strip()
+                            print(f"Текущий прогресс: {last_step}")
+
+                # проверка финала
+                if "step: 12" in body_text and "загрузка завершена" in body_text:
+                    send_telegram(f"✅ ГОТОВО:\n{last_step}\nЗагрузка завершена")
                     break
-            except:
-                pass
 
-            time.sleep(5)
+            except Exception as e:
+                print(f"Ошибка чтения страницы: {e}")
+
+            time.sleep(3)
 
     except Exception as e:
         send_telegram(f"⚠️ ERROR: {e}")
