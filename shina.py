@@ -2,6 +2,7 @@ import time
 import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
 
 WARMUP_URL = "https://titanshina.ua/test/?tyres=1"
@@ -13,7 +14,6 @@ TIMEOUT = 180
 def create_driver():
     options = Options()
 
-    # Важно для GitHub Actions / серверов
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -21,15 +21,13 @@ def create_driver():
     options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--window-size=1920,1080")
 
-    # User-Agent как у обычного браузера
     options.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     )
 
-    driver = webdriver.Chrome(options=options)
-    return driver
+    return webdriver.Chrome(options=options)
 
 
 def warmup(driver):
@@ -41,6 +39,42 @@ def warmup(driver):
         print(f"Warmup refresh {i + 1}")
         driver.refresh()
         time.sleep(2)
+
+
+def debug_page(driver):
+    """Функция диагностики состояния страницы"""
+    print("\n--- DEBUG PAGE ---")
+
+    title = driver.title
+    print("TITLE:", title)
+
+    html = driver.page_source
+
+    print("\n--- HTML SNIPPET ---")
+    print(html[:1000])  # первые 1000 символов
+
+    print("\n--- CHECKS ---")
+
+    print("Contains 'Статус загрузки: Запрещено':",
+          "Статус загрузки: Запрещено" in html)
+
+    print("Contains 'step: 12':",
+          "step: 12" in html)
+
+    print("Contains 'Загрузка завершена':",
+          "Загрузка завершена" in html)
+
+    # Попробуем вытащить step грубо
+    step = None
+    if "step:" in html:
+        try:
+            step = html.split("step:")[1].split("<")[0].strip()
+        except:
+            pass
+
+    print("Detected STEP:", step)
+
+    print("--- END DEBUG ---\n")
 
 
 def monitor(driver):
@@ -56,26 +90,23 @@ def monitor(driver):
             print("❌ Timeout reached")
             return False
 
-        page = driver.page_source
+        debug_page(driver)
 
-        print("Проверка состояния...")
+        html = driver.page_source
 
         if (
-            "Статус загрузки: Запрещено" in page
-            and "step: 12" in page
-            and "Загрузка завершена" in page
+            "Статус загрузки: Запрещено" in html
+            and "step: 12" in html
+            and "Загрузка завершена" in html
         ):
             print("\n✅ ГОТОВО!")
-            print("Статус загрузки: Запрещено")
-            print("step: 12")
-            print("Загрузка завершена")
             return True
 
         time.sleep(5)
 
 
 def main():
-    print(">>> ЗАПУСК 'ШИНА' (FULL MODE)...")
+    print(">>> ЗАПУСК 'ШИНА' (FULL MODE WITH DEBUG)...")
 
     driver = create_driver()
 
