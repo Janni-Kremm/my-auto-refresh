@@ -2,28 +2,25 @@ name: Shina Check (Daily)
 
 on:
   schedule:
-    # 8:00 UTC = 10:00 Киев (зимой)
-    # 14:00 UTC = 16:00 Киев (зимой)
     - cron: '0 8,14 * * *'
-  
-  # Кнопка для ручного запуска (чтобы вы могли проверить прямо сейчас)
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Install libraries
+      - name: Install dependencies
         run: |
-                    pip install selenium webdriver-manager requests undetected-chromedriver
+          pip install selenium webdriver-manager requests
 
       - name: Run Shina script
         env:
