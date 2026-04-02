@@ -2,8 +2,11 @@ import time
 import sys
 import os
 import requests
-import undetected_chromedriver as uc
+
+from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 
 # --- НАСТРОЙКИ ---
@@ -29,21 +32,24 @@ def send_telegram(message):
 
 
 def create_driver():
-    options = uc.ChromeOptions()
+    options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
 
-    return uc.Chrome(options=options)
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+
+    return driver
 
 
 def run_shina_task():
-    print(">>> ЗАПУСК 'ШИНА' (STABLE MODE)...")
+    print(">>> ЗАПУСК 'ШИНА' (STABLE SELENIUM MODE)...")
 
     driver = None
 
-    # --- ИНИЦИАЛИЗАЦИЯ ДРАЙВЕРА С РЕТРАЕМ ---
+    # --- RETRY ---
     for attempt in range(3):
         try:
             driver = create_driver()
@@ -71,7 +77,7 @@ def run_shina_task():
         except:
             pass
 
-        # Несколько обновлений
+        # Refresh
         for i in range(3):
             print(f"Refresh {i+1}")
             driver.refresh()
@@ -94,7 +100,7 @@ def run_shina_task():
         except:
             print("Не удалось прочитать страницу")
 
-        # Цикл ожидания
+        # Ожидание
         while True:
             if time.time() - start_time > MAX_WAIT_MINUTES * 60:
                 try:
