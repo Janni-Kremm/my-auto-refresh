@@ -5,55 +5,75 @@ import requests
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 
+
 # --- НАСТРОЙКИ ---
 URL_WARMUP = "https://titanshina.ua/test/?tyres=1"
 URL_MAIN = "https://titanshina.ua/test/"
-FINAL_TEXT = "the end" 
+FINAL_TEXT = "the end"
 MAX_WAIT_MINUTES = 15
 
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-def send_telegram(message):
-    if not TG_TOKEN: return
-    try:
-        requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", 
-                      data={"chat_id": TG_CHAT_ID, "text": f"🚗 [Шина]: {message}"})
-    except: pass
 
-def run_shina_task():
-    print(">>> ЗАПУСК 'ШИНА' (STEALTH MODE + VERSION FIX)...")
-    
+def send_telegram(message):
+    if not TG_TOKEN:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+            data={"chat_id": TG_CHAT_ID, "text": f"🚗 [Шина]: {message}"}
+        )
+    except:
+        pass
+
+
+def create_driver():
     options = uc.ChromeOptions()
-    options.add_argument("--headless")
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
-    
-    # ФИКС ВЕРСИИ: Просим библиотеку использовать ту версию, которая реально стоит в системе
-    # Обычно на GitHub Actions это сейчас 144 или 145. Ставим version_main=144 (самый безопасный вариант сейчас)
-    try:
-        driver = uc.Chrome(options=options, version_main=144)
-    except Exception as e:
-        print(f"Попытка с версией 144 не удалась ({e}), пробую авто-определение...")
-        driver = uc.Chrome(options=options) # Пробуем без версии, если вдруг там уже обновили Chrome
+
+    return uc.Chrome(options=options)
+
+
+def run_shina_task():
+    print(">>> ЗАПУСК 'ШИНА' (STABLE MODE)...")
+
+    driver = None
+
+    # --- ИНИЦИАЛИЗАЦИЯ ДРАЙВЕРА С РЕТРАЕМ ---
+    for attempt in range(3):
+        try:
+            driver = create_driver()
+            break
+        except Exception as e:
+            print(f"Ошибка запуска драйвера (попытка {attempt+1}): {e}")
+            time.sleep(5)
+
+    if not driver:
+        send_telegram("❌ Не удалось запустить браузер")
+        sys.exit(1)
 
     try:
         # 1. РАЗОГРЕВ
         print(f"Разогрев: {URL_WARMUP}")
         driver.get(URL_WARMUP)
-        time.sleep(15) 
-        
-        # Проверяем защиту
+        time.sleep(15)
+
+        # Проверка Cloudflare
         try:
             body_text = driver.find_element(By.TAG_NAME, "body").text
             if "Verify you are human" in body_text:
-                print("!!! Cloudflare detected. Жду 30 сек...")
+                print("!!! Cloudflare detected. Жду...")
                 time.sleep(30)
-        except: pass
-        
-        for i in range(1, 4):
-            print(f"Update {i}...")
+        except:
+            pass
+
+        # Несколько обновлений
+        for i in range(3):
+            print(f"Refresh {i+1}")
             driver.refresh()
             time.sleep(10)
 
@@ -61,45 +81,51 @@ def run_shina_task():
         print(f"Основной процесс: {URL_MAIN}")
         driver.get(URL_MAIN)
         time.sleep(10)
-        
+
         start_time = time.time()
-        
-        # Печатаем, что видим
+
+        # Лог страницы
         try:
             initial_source = driver.find_element(By.TAG_NAME, "body").text
-            print(f"--- ВИДИМ НА ЭКРАНЕ ---\n{initial_source[:200]}\n-----------------------")
-            
-            if "Verify you are human" in initial_source:
-                 send_telegram("❌ БЛОКИРОВКА: Cloudflare не пускает бота (капча).")
-                 # Не выходим сразу, вдруг пропустит позже, но предупреждаем
-        except:
-            print("Не удалось прочитать текст страницы (возможно, еще грузится)")
+            print(f"--- ВИДИМ ---\n{initial_source[:200]}\n-------------")
 
+            if "Verify you are human" in initial_source:
+                send_telegram("❌ Cloudflare блокирует доступ")
+        except:
+            print("Не удалось прочитать страницу")
+
+        # Цикл ожидания
         while True:
-            if time.time() - start_time > (MAX_WAIT_MINUTES * 60):
+            if time.time() - start_time > MAX_WAIT_MINUTES * 60:
                 try:
                     final_source = driver.find_element(By.TAG_NAME, "body").text[:200]
-                except: final_source = "???"
-                send_telegram(f"❌ ТАЙМ-АУТ. Экран:\n'{final_source}...'")
+                except:
+                    final_source = "???"
+
+                send_telegram(f"❌ TIMEOUT: {final_source}")
                 sys.exit(1)
 
             try:
-                page_text_lower = driver.find_element(By.TAG_NAME, "body").text.lower()
-                
-                if FINAL_TEXT in page_text_lower:
-                    send_telegram("✅ УСПЕХ! Найдена надпись 'the end'.")
+                page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+
+                if FINAL_TEXT in page_text:
+                    send_telegram("✅ SUCCESS: найден 'the end'")
                     break
-            except: pass
-                
+            except:
+                pass
+
             time.sleep(5)
 
     except Exception as e:
-        send_telegram(f"⚠️ СБОЙ: {e}")
+        send_telegram(f"⚠️ ERROR: {e}")
         sys.exit(1)
+
     finally:
         try:
             driver.quit()
-        except: pass
+        except:
+            pass
+
 
 if __name__ == "__main__":
     run_shina_task()
