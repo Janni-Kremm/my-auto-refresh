@@ -1,128 +1,131 @@
 import time
-import sys
 import os
-import requests
-
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+
+# -----------------------------
+# НАСТРОЙКИ
+# -----------------------------
+WARMUP_URL = "https://titanshina.ua/test/?tyres=1"
+MAIN_URL = "https://titanshina.ua/test/"
+
+WARMUP_REFRESH_COUNT = 5
+STEP_TARGET = 12
 
 
-# --- НАСТРОЙКИ ---
-URL_WARMUP = "https://titanshina.ua/test/?tyres=1"
-URL_MAIN = "https://titanshina.ua/test/"
-
-MAX_WAIT_MINUTES = 15
-
-TG_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-
-
-def send_telegram(message):
-    if not TG_TOKEN:
-        return
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-            data={"chat_id": TG_CHAT_ID, "text": f"🚗 [Шина]: {message}"}
-        )
-    except:
-        pass
-
-
+# -----------------------------
+# ДРАЙВЕР
+# -----------------------------
 def create_driver():
-    options = webdriver.ChromeOptions()
+    options = Options()
 
-    options.add_argument("--headless=new")
+    # ВАЖНО: имитация реального браузера
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--start-maximized")
 
-    # небольшой антидетект-минимум
+    # User-Agent (как у обычного Chrome)
     options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
     )
 
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    driver = webdriver.Chrome(options=options)
+
+    # Убираем признаки автоматизации
+    driver.execute_script(
+        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+    )
 
     return driver
 
 
-def run_shina_task():
-    print(">>> ЗАПУСК 'ШИНА' (STEP MONITOR MODE)...")
+# -----------------------------
+# WARMUP
+# -----------------------------
+def warmup(driver):
+    print(f"Разогрев: {WARMUP_URL}")
+    driver.get(WARMUP_URL)
 
-    driver = None
+    time.sleep(3)
 
-    # --- запуск драйвера ---
-    for attempt in range(3):
-        try:
-            driver = create_driver()
+    for i in range(WARMUP_REFRESH_COUNT):
+        print(f"Warmup refresh {i + 1}")
+        driver.refresh()
+        time.sleep(2)
+
+
+# -----------------------------
+# ОСНОВНОЙ МОНИТОРИНГ
+# -----------------------------
+def monitor(driver):
+    print(f"Переход: {MAIN_URL}")
+    driver.get(MAIN_URL)
+
+    time.sleep(5)
+
+    step = 0
+    timeout = 180  # максимум ожидания (сек)
+
+    start_time = time.time()
+
+    while True:
+        elapsed = time.time() - start_time
+
+        if elapsed > timeout:
+            print("Timeout reached")
             break
-        except Exception as e:
-            print(f"Ошибка запуска драйвера (попытка {attempt+1}): {e}")
-            time.sleep(5)
 
-    if not driver:
-        send_telegram("❌ Не удалось запустить браузер")
-        sys.exit(1)
+        page_text = driver.page_source
 
-    try:
-        # --- 1. РАЗОГРЕВ ---
-        print(f"Разогрев: {URL_WARMUP}")
-        driver.get(URL_WARMUP)
+        # Проверяем шаг
+        if "step: 12" in page_text:
+            step = 12
+
+        print("Текущий статус проверяется...")
+
+        if (
+            "Статус загрузки: Запрещено" in page_text
+            and "step: 12" in page_text
+            and "Загрузка завершена" in page_text
+        ):
+            print("\n✅ ГОТОВО!")
+            print("Статус загрузки: Запрещено")
+            print("step: 12")
+            print("Загрузка завершена")
+            return True
+
         time.sleep(5)
 
-        # несколько обновлений
-        for i in range(3):
-            print(f"Warmup refresh {i+1}")
-            driver.refresh()
-            time.sleep(5)
+    return False
 
-        # --- 2. ОСНОВНОЙ URL ---
-        print(f"Переход: {URL_MAIN}")
-        driver.get(URL_MAIN)
 
-        start_time = time.time()
+# -----------------------------
+# MAIN
+# -----------------------------
+def main():
+    print(">>> ЗАПУСК 'ШИНА' (STABLE MODE)...")
 
-        last_step = None
+    driver = create_driver()
 
-        while True:
-            if time.time() - start_time > MAX_WAIT_MINUTES * 60:
-                send_telegram("❌ TIMEOUT: не дошли до step 12")
-                sys.exit(1)
+    try:
+        warmup(driver)
+        success = monitor(driver)
 
-            try:
-                body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
-
-                # ищем step
-                if "step:" in body_text:
-                    for line in body_text.split("\n"):
-                        if "step:" in line:
-                            last_step = line.strip()
-                            print(f"Текущий прогресс: {last_step}")
-
-                # проверка финала
-                if "step: 12" in body_text and "загрузка завершена" in body_text:
-                    send_telegram(f"✅ ГОТОВО:\n{last_step}\nЗагрузка завершена")
-                    break
-
-            except Exception as e:
-                print(f"Ошибка чтения страницы: {e}")
-
-            time.sleep(3)
+        if not success:
+            print("❌ Не удалось дождаться результата")
+            exit(1)
 
     except Exception as e:
-        send_telegram(f"⚠️ ERROR: {e}")
-        sys.exit(1)
+        print("Ошибка:", str(e))
+        exit(1)
 
     finally:
-        try:
-            driver.quit()
-        except:
-            pass
+        driver.quit()
 
 
 if __name__ == "__main__":
-    run_shina_task()
+    main()
