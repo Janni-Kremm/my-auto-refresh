@@ -1,8 +1,8 @@
-name: Shina Check (Daily)
+name: Run Shina Script
 
 on:
-  schedule:
-    - cron: '0 8,14 * * *'
+  push:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -16,14 +16,21 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: "3.9"
 
       - name: Install dependencies
         run: |
-          pip install selenium webdriver-manager requests
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Run Shina script
+      - name: Install Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Run script
+        run: |
+          python shina.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python shina.py
