@@ -2,31 +2,26 @@ import time
 import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
 
-# -----------------------------
-# НАСТРОЙКИ
-# -----------------------------
+
 WARMUP_URL = "https://titanshina.ua/test/?tyres=1"
 MAIN_URL = "https://titanshina.ua/test/"
-
 WARMUP_REFRESH_COUNT = 5
-STEP_TARGET = 12
+TIMEOUT = 180
 
 
-# -----------------------------
-# ДРАЙВЕР
-# -----------------------------
 def create_driver():
     options = Options()
 
-    # ВАЖНО: имитация реального браузера
+    # Важно для GitHub Actions / серверов
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--start-maximized")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--remote-debugging-port=9222")
+    options.add_argument("--window-size=1920,1080")
 
-    # User-Agent (как у обычного Chrome)
+    # User-Agent как у обычного браузера
     options.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -34,22 +29,12 @@ def create_driver():
     )
 
     driver = webdriver.Chrome(options=options)
-
-    # Убираем признаки автоматизации
-    driver.execute_script(
-        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-    )
-
     return driver
 
 
-# -----------------------------
-# WARMUP
-# -----------------------------
 def warmup(driver):
     print(f"Разогрев: {WARMUP_URL}")
     driver.get(WARMUP_URL)
-
     time.sleep(3)
 
     for i in range(WARMUP_REFRESH_COUNT):
@@ -58,39 +43,27 @@ def warmup(driver):
         time.sleep(2)
 
 
-# -----------------------------
-# ОСНОВНОЙ МОНИТОРИНГ
-# -----------------------------
 def monitor(driver):
     print(f"Переход: {MAIN_URL}")
     driver.get(MAIN_URL)
-
-    time.sleep(5)
-
-    step = 0
-    timeout = 180  # максимум ожидания (сек)
 
     start_time = time.time()
 
     while True:
         elapsed = time.time() - start_time
 
-        if elapsed > timeout:
-            print("Timeout reached")
-            break
+        if elapsed > TIMEOUT:
+            print("❌ Timeout reached")
+            return False
 
-        page_text = driver.page_source
+        page = driver.page_source
 
-        # Проверяем шаг
-        if "step: 12" in page_text:
-            step = 12
-
-        print("Текущий статус проверяется...")
+        print("Проверка состояния...")
 
         if (
-            "Статус загрузки: Запрещено" in page_text
-            and "step: 12" in page_text
-            and "Загрузка завершена" in page_text
+            "Статус загрузки: Запрещено" in page
+            and "step: 12" in page
+            and "Загрузка завершена" in page
         ):
             print("\n✅ ГОТОВО!")
             print("Статус загрузки: Запрещено")
@@ -100,14 +73,9 @@ def monitor(driver):
 
         time.sleep(5)
 
-    return False
 
-
-# -----------------------------
-# MAIN
-# -----------------------------
 def main():
-    print(">>> ЗАПУСК 'ШИНА' (STABLE MODE)...")
+    print(">>> ЗАПУСК 'ШИНА' (FULL MODE)...")
 
     driver = create_driver()
 
@@ -116,11 +84,10 @@ def main():
         success = monitor(driver)
 
         if not success:
-            print("❌ Не удалось дождаться результата")
             exit(1)
 
     except Exception as e:
-        print("Ошибка:", str(e))
+        print("❌ Ошибка:", str(e))
         exit(1)
 
     finally:
